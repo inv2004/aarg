@@ -35,13 +35,13 @@ template setEnum[T,U](p: seq[string], res: var T, k: string, v: U, val: string) 
       {.cast(uncheckedAssign).}:
         v = e
       p.add k
-      return
 
 proc setArg[T](p: var seq[string], res: var T, val: string) =
   for k, v in fieldPairs(res):
     #echo k, ": ", val
     when v is enum:
       setEnum(p, res, k, v, val)
+      return
     else:
       if k notin p:
         setField(p, v, val, k)
@@ -58,8 +58,20 @@ proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
   for k, v in fieldPairs(res):
     #echo k, ": ", v, "   ", key
     when v is enum:
-      if k notin p and cmpKey(key, k, short):
-        setEnum(p, res, k, v, val)
+      if k notin p:
+        if cmpKey(key, k, short):
+          setEnum(p, res, k, v, val)
+          return
+        else:
+          when v.hasCustomPragma(deff):
+            when v is enum:
+              let pr = v.getCustomPragmaVal(deff)
+              for e in low(typeof(v))..high(typeof(v)):
+                if toLowerAscii($e) == toLowerAscii(pr):
+                  {.cast(uncheckedAssign).}:
+                    v = e
+            else:
+              v = v.getCustomPragmaVal(deff)
     else:
       if k notin p and cmpKey(key, k, short):
         setField(p, v, val, k)

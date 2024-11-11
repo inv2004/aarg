@@ -76,7 +76,7 @@ type
     of CmdA:
       discard
     of CmdB:
-      case b_kind: Cmd2Kind
+      case b_kind {.deff: "CmdCC".}: Cmd2Kind
       of CmdAA:
         e: AAEnum
         names: seq[string]
@@ -96,5 +96,5 @@ test "cmd":
   #check parseArgs(B, "-v cmdb cmdbb n1 u1 -v") == B(v: true, kind: CmdB, b_kind: CmdBB, up_name: "n1", up_url: "u1", up_v: true)
   #check parseArgs(B, "-v cmdb cmdaa -e:u n1 n2") == B(v: true, kind: CmdB, b_kind: CmdAA, e: U, names: @["n1", "n2"])
   #check parseArgs(B, "-v cmdb cmdcc") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
-  check parseArgs(B, "-e:u") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
+  check parseArgs(B, "-v --num:22") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 22, num2: 0)
 
