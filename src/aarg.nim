@@ -29,24 +29,14 @@ proc setField(p: var seq[string], r: var bool, val, k: string) =
   else:
     raise newException(ValueError, "cannot parse bool: `" & val & "`")
 
-template setEnum[T,U](p: seq[string], res: var T, k: string, v: U, val: string) =
+template setEnum[T,U](p: var seq[string], res: var T, v: U, val, k: string, ok: var bool) =
   for e in low(typeof(v))..high(typeof(v)):
     if toLowerAscii($e) == toLowerAscii(val):
       {.cast(uncheckedAssign).}:
         v = e
       p.add k
-
-proc setArg[T](p: var seq[string], res: var T, val: string) =
-  for k, v in fieldPairs(res):
-    #echo k, ": ", val
-    when v is enum:
-      setEnum(p, res, k, v, val)
-      return
-    else:
-      if k notin p:
-        setField(p, v, val, k)
-        return
-  raise newException(ValueError, "extra arg `" & val & "`")
+      ok = true
+      break
 
 proc cmpKey(key, k: string, short: bool): bool =
   if short:
@@ -55,35 +45,53 @@ proc cmpKey(key, k: string, short: bool): bool =
     key == k.split("_")[^1]
 
 proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
+  var ok = false
   for k, v in fieldPairs(res):
-    #echo k, ": ", v, "   ", key
+    #echo "Opt: ", key , "=", val, " <=> ", k, " (", typeof(v), ")"
     when v is enum:
-      if k notin p:
+      if not ok and k notin p:
         if cmpKey(key, k, short):
-          setEnum(p, res, k, v, val)
-          return
+          setEnum(p, res, v, val, k, ok)
         else:
           when v.hasCustomPragma(deff):
-            when v is enum:
-              let pr = v.getCustomPragmaVal(deff)
-              for e in low(typeof(v))..high(typeof(v)):
-                if toLowerAscii($e) == toLowerAscii(pr):
-                  {.cast(uncheckedAssign).}:
-                    v = e
-            else:
-              v = v.getCustomPragmaVal(deff)
+            let pr = v.getCustomPragmaVal(deff)
+            for e in low(typeof(v))..high(typeof(v)):
+              if toLowerAscii($e) == toLowerAscii(pr):
+                {.cast(uncheckedAssign).}:
+                  v = e
     else:
-      if k notin p and cmpKey(key, k, short):
+      if not ok and k notin p and cmpKey(key, k, short):
         setField(p, v, val, k)
-        return
-  raise newException(ValueError, "extra flag `" & key & "`")
+        ok = true
+      else:
+        when v.hasCustomPragma(deff):
+          v = v.getCustomPragmaVal(deff)
+  if not ok:
+    raise newException(ValueError, "extra flag `" & key & "`")
+
+proc setArg[T](p: var seq[string], res: var T, val: string) =
+  var ok = false
+  for k, v in fieldPairs(res):
+    # echo "Arg: ", val, " <=> ", k, " (", typeof(v), ")"
+    when v is enum:
+      if not ok and k notin p:
+        setEnum(p, res, v, val, k, ok)
+    else:
+      if not ok and k notin p:
+        setField(p, v, val, k)
+        ok = true
+      else:
+        when v.hasCustomPragma(deff):
+          v = v.getCustomPragmaVal(deff)
+  if not ok:
+    raise newException(ValueError, "extra arg `" & val & "`")
 
 proc parseArgs*[T: object](t: typedesc[T], s: string): T =
+  #echo "> ", s
   result = T()
   var processed: seq[string]
   var p = initOptParser(s)
   for kind, key, val in p.getopt():
-    #echo kind, " - ", key, " - ", val
     case kind
     of cmdShortOption:
       setOpt(processed, result, key, val, true)
@@ -98,19 +106,17 @@ proc parseArgs*[T: object](t: typedesc[T], s: string): T =
   for k, v in fieldPairs(result):
     when v isnot seq:
       if k notin processed:
-        when not v.hasCustomPragma(deff):
+        when v.hasCustomPragma(deff):
+          when v is enum:
+            let pr = v.getCustomPragmaVal(deff)
+            for e in low(typeof(v))..high(typeof(v)):
+              if toLowerAscii($e) == toLowerAscii(pr):
+                {.cast(uncheckedAssign).}:
+                  v = e
+          else:
+            v = v.getCustomPragmaVal(deff)
+        else:
           wasNotProcessed.add "`" & k & "`"
-        #when v.hasCustomPragma(deff):
-        #  when v is enum:
-        #    let pr = v.getCustomPragmaVal(deff)
-        #    for e in low(typeof(v))..high(typeof(v)):
-        #      if toLowerAscii($e) == toLowerAscii(pr):
-        #        {.cast(uncheckedAssign).}:
-        #          v = e
-        #  else:
-        #    v = v.getCustomPragmaVal(deff)
-        #else:
-        #  wasNotProcessed.add "`" & k & "`"
 
   if wasNotProcessed.len > 0:
     raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
