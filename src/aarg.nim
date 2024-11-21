@@ -30,20 +30,20 @@ proc setField(p: var seq[string], r: var bool, val, k: string) =
   else:
     raise newException(ValueError, "cannot parse bool: `" & val & "`")
 
-template setEnum[T,U](p: var seq[string], res: var T, v: U, val, k: string, ok: var bool) =
-  for e in low(typeof(v))..high(typeof(v)):
-    if toLowerAscii($e) == toLowerAscii(val):
-      {.cast(uncheckedAssign).}:
-        v = e
-      p.add k
-      ok = true
-      break
-
 proc cmpKey(key, k: string, short: bool): bool =
   if short:
     key[0] == k.split("_")[^1][0]
   else:
     key == k.split("_")[^1]
+
+template setEnum[T,U](p: var seq[string], res: var T, v: U, val, k: string, ok: var bool) =
+  for e in low(typeof(v))..high(typeof(v)):
+    if cmpKey(toLowerAscii(val), toLowerAscii($e), false):
+      {.cast(uncheckedAssign).}:
+        v = e
+      p.add k
+      ok = true
+      break
 
 proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
   var ok = false

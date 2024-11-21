@@ -66,17 +66,17 @@ test "default":
   check parseArgs(B, "") == B(i:1, s: "222", e: D, f:1.1)
 
 type
-  Cmd1Kind = enum CmdA, CmdB
-  Cmd2Kind = enum CmdAA, CmdBB, CmdCC
+  Cmd1Kind = enum CmdA, Cmd_b
+  Cmd2Kind = enum CmdAA, CmdBB, Cmd_cc
   AAEnum = enum P, U
 
   B = object
     v: bool
-    case kind {.default: "CmdB".}: Cmd1Kind
+    case kind {.default: "Cmd_b".}: Cmd1Kind
     of CmdA:
       discard
-    of CmdB:
-      case b_kind {.default: "CmdCC".}: Cmd2Kind
+    of Cmd_b:
+      case b_kind {.default: "Cmd_cc".}: Cmd2Kind
       of CmdAA:
         e: AAEnum
         names: seq[string]
@@ -84,7 +84,7 @@ type
         up_name: string
         up_url: string
         up_v: bool
-      of CmdCC:
+      of Cmd_cc:
         name {.default: "d1".}: string
         num {.default: 11.}: int
         num2 {.default: 0.}: int
@@ -93,9 +93,9 @@ proc `==`(a, b: B): bool =
   $a == $b
 
 test "cmd":
-  check parseArgs(B, "-v cmdb cmdbb n1 u1 -v") == B(v: true, kind: CmdB, b_kind: CmdBB, up_name: "n1", up_url: "u1", up_v: true)
-  check parseArgs(B, "-v cmdb cmdaa -e:u n1 n2") == B(v: true, kind: CmdB, b_kind: CmdAA, e: U, names: @["n1", "n2"])
-  check parseArgs(B, "-v cmdb cmdcc") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
+  check parseArgs(B, "-v b cmdbb n1 u1 -v") == B(v: true, kind: Cmd_B, b_kind: CmdBB, up_name: "n1", up_url: "u1", up_v: true)
+  check parseArgs(B, "-v b cmdaa -e:u n1 n2") == B(v: true, kind: CmdB, b_kind: CmdAA, e: U, names: @["n1", "n2"])
+  check parseArgs(B, "-v b cc") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
   check parseArgs(B, "-v --num:22") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 22, num2: 0)
 
 test "help":
