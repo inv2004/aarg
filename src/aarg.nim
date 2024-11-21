@@ -2,7 +2,8 @@ import std/parseopt
 import std/strutils
 import std/macros
 
-template deff*(key: untyped) {.pragma.}
+template def*(key: untyped) {.pragma.}
+template default*(key: untyped) {.pragma.}
 
 proc setField(p: var seq[string], r: var seq[string], val, k: string) =
   r.add val
@@ -53,8 +54,8 @@ proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
         if cmpKey(key, k, short):
           setEnum(p, res, v, val, k, ok)
         else:
-          when v.hasCustomPragma(deff):
-            let pr = v.getCustomPragmaVal(deff)
+          when v.hasCustomPragma(aarg.default):
+            let pr = v.getCustomPragmaVal(aarg.default)
             for e in low(typeof(v))..high(typeof(v)):
               if toLowerAscii($e) == toLowerAscii(pr):
                 {.cast(uncheckedAssign).}:
@@ -64,8 +65,8 @@ proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
         setField(p, v, val, k)
         ok = true
       else:
-        when v.hasCustomPragma(deff):
-          v = v.getCustomPragmaVal(deff)
+        when v.hasCustomPragma(aarg.default):
+          v = v.getCustomPragmaVal(aarg.default)
   if not ok:
     raise newException(ValueError, "extra flag `" & key & "`")
 
@@ -81,8 +82,8 @@ proc setArg[T](p: var seq[string], res: var T, val: string) =
         setField(p, v, val, k)
         ok = true
       else:
-        when v.hasCustomPragma(deff):
-          v = v.getCustomPragmaVal(deff)
+        when v.hasCustomPragma(aarg.default):
+          v = v.getCustomPragmaVal(aarg.default)
   if not ok:
     raise newException(ValueError, "extra arg `" & val & "`")
 
@@ -106,18 +107,30 @@ proc parseArgs*[T: object](t: typedesc[T], s: string): T =
   for k, v in fieldPairs(result):
     when v isnot seq:
       if k notin processed:
-        when v.hasCustomPragma(deff):
+        when v.hasCustomPragma(aarg.default):
           when v is enum:
-            let pr = v.getCustomPragmaVal(deff)
+            let pr = v.getCustomPragmaVal(aarg.default)
             for e in low(typeof(v))..high(typeof(v)):
               if toLowerAscii($e) == toLowerAscii(pr):
                 {.cast(uncheckedAssign).}:
                   v = e
           else:
-            v = v.getCustomPragmaVal(deff)
+            v = v.getCustomPragmaVal(aarg.default)
         else:
           wasNotProcessed.add "`" & k & "`"
 
   if wasNotProcessed.len > 0:
     raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
+
+proc help*[T: object](): string =
+  var res = T()
+  var processed: seq[string]
+  for k, v in fieldPairs(res):
+    when v is enum:
+      result.add "  " & $v & "\n"
+      {.cast(uncheckedAssign).}:
+        v = typeof(v)(ord(v) + 1)
+    else:
+      processed.add k
+      result.add "  " & k & "\n"
 
