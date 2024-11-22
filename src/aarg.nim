@@ -2,8 +2,8 @@ import std/parseopt
 import std/strutils
 import std/macros
 
-template def*(key: untyped) {.pragma.}
 template default*(key: untyped) {.pragma.}
+template help*(help: string) {.pragma.}
 
 proc setField(p: var seq[string], r: var seq[string], val, k: string) =
   r.add val
@@ -122,15 +122,19 @@ proc parseArgs*[T: object](t: typedesc[T], s: string): T =
   if wasNotProcessed.len > 0:
     raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
 
-proc help*[T: object](): string =
+proc mkhelp*[T: object](): string =
   var res = T()
-  var processed: seq[string]
+  var lvl = 1
   for k, v in fieldPairs(res):
     when v is enum:
-      result.add "  " & $v & "\n"
+      for e in low(typeof(v))..high(typeof(v)):
+        result.add (repeat("  ", lvl)) & "- " & $e & "\n"
       {.cast(uncheckedAssign).}:
         v = typeof(v)(ord(v) + 1)
+      lvl += 1
     else:
-      processed.add k
-      result.add "  " & k & "\n"
+      let h =
+        when v.hasCustomPragma(aarg.help): v.getCustomPragmaVal(aarg.help)
+        else: ""
+      result.add repeat("  ", lvl) & k & ": " & $typeof(v) & "  " & h & "\n"
 

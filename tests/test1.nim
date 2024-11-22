@@ -82,10 +82,10 @@ type
         names: seq[string]
       of CmdBB:
         up_name: string
-        up_url: string
+        up_url {.help: "url text".}: string
         up_v: bool
       of Cmd_cc:
-        name {.default: "d1".}: string
+        name {.default: "d1", help: "some name".}: string
         num {.default: 11.}: int
         num2 {.default: 0.}: int
 
@@ -99,5 +99,5 @@ test "cmd":
   check parseArgs(B, "-v --num:22") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 22, num2: 0)
 
 test "help":
-  echo help[B]()
+  echo mkhelp[B]()
 
