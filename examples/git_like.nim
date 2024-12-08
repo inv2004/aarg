@@ -1,0 +1,4 @@
+import aarg
+
+echo "ok"
+

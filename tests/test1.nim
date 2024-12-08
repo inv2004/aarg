@@ -88,6 +88,7 @@ type
         name {.default: "d1", help: "some name".}: string
         num {.default: 11.}: int
         num2 {.default: 0.}: int
+    other {.default: "".}: string 
 
 proc `==`(a, b: B): bool =
   $a == $b
@@ -97,6 +98,7 @@ test "cmd":
   check parseArgs(B, "-v b cmdaa -e:u n1 n2") == B(v: true, kind: CmdB, b_kind: CmdAA, e: U, names: @["n1", "n2"])
   check parseArgs(B, "-v b cc") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
   check parseArgs(B, "-v --num:22") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 22, num2: 0)
+  check parseArgs(B, "-v c") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0, other: "c")
 
 test "help":
   echo mkhelp[B]()
