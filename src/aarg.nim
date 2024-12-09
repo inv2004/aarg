@@ -3,6 +3,7 @@ import std/strutils
 import std/macros
 
 template default*(key: untyped) {.pragma.}
+template another*(key: untyped) {.pragma.}
 template help*(help: string) {.pragma.}
 
 proc setField(p: var seq[string], r: var seq[string], val, k: string) =
@@ -43,7 +44,6 @@ template setEnum[T,U](p: var seq[string], res: var T, v: U, val, k: string, ok: 
         v = e
       p.add k
       ok = true
-      break
 
 proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
   var ok = false
@@ -53,6 +53,8 @@ proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
       if not ok and k notin p:
         if cmpKey(key, k, short):
           setEnum(p, res, v, val, k, ok)
+          if ok:
+            break
         else:
           when v.hasCustomPragma(aarg.default):
             let pr = v.getCustomPragmaVal(aarg.default)
@@ -73,10 +75,18 @@ proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
 proc setArg[T](p: var seq[string], res: var T, val: string) =
   var ok = false
   for k, v in fieldPairs(res):
-    # echo "Arg: ", val, " <=> ", k, " (", typeof(v), ")"
+    echo "Arg: ", val, " <=> ", k, " (", typeof(v), ")"
     when v is enum:
       if not ok and k notin p:
         setEnum(p, res, v, val, k, ok)
+        if not ok:
+          when v.hasCustomPragma(aarg.another):
+            let pr = v.getCustomPragmaVal(aarg.another)
+            for e in low(typeof(v))..high(typeof(v)):
+              if toLowerAscii($e) == toLowerAscii(pr):
+                {.cast(uncheckedAssign).}:
+                  v = e
+                p.add k
     else:
       if not ok and k notin p:
         setField(p, v, val, k)
@@ -88,7 +98,7 @@ proc setArg[T](p: var seq[string], res: var T, val: string) =
     raise newException(ValueError, "extra arg `" & val & "`")
 
 proc parseArgs*[T: object](t: typedesc[T], s: string): T =
-  #echo "> ", s
+  echo "> ", s
   result = T()
   var processed: seq[string]
   var p = initOptParser(s)

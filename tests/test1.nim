@@ -99,6 +99,25 @@ test "cmd":
   check parseArgs(B, "-v b cc") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
   check parseArgs(B, "-v --num:22") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 22, num2: 0)
   check parseArgs(B, "-v c") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0, other: "c")
+  check parseArgs(B, "-v") == B(v: true, kind: CmdB, b_kind: CmdCC, name: "d1", num: 11, num2: 0)
+
+type
+  Cmd3Kind = enum Cmd_a, Cmd_b
+
+  C = object
+    v: bool
+    case kind {.default: "cmd_a", another:"cmd_b".}: Cmd3Kind
+    of Cmd_a:
+      discard
+    of Cmd_b:
+      val: string
+
+proc `==`(a, b: C): bool =
+  $a == $b
+
+test "other":
+  check parseArgs(C, "-v a") == C(v: true, kind: Cmd_a)
+  check parseArgs(C, "-v bb") == C(v: true, kind: Cmd_b, val: "bb")
 
 test "help":
   echo mkhelp[B]()
