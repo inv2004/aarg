@@ -132,19 +132,29 @@ proc parseArgs*[T: object](t: typedesc[T], s: string): T =
   if wasNotProcessed.len > 0:
     raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
 
+proc mkhelpobj*(res: var object, skip = 0, skip_lvl = 0): string =
+  var lvl = 0
+  var i = 1
+  for k, v in fieldPairs(res):
+    if i > skip:
+      when v is enum:
+        for e in low(typeof(v))..high(typeof(v)):
+          result.add (repeat("  ", lvl)) & "- " & $e & "\n"
+          {.cast(uncheckedAssign).}:
+            v = e
+          result.add mkhelpobj(res, i, lvl)
+          result.add "---\n"
+        lvl += 1
+      else:
+        let h =
+          when v.hasCustomPragma(aarg.help): v.getCustomPragmaVal(aarg.help)
+          else: ""
+        if lvl >= skip_lvl:
+          result.add repeat("  ", lvl) & k & ": " & $typeof(v) & "  " & h & "\n"
+    inc i
+
+
 proc mkhelp*[T: object](): string =
   var res = T()
-  var lvl = 1
-  for k, v in fieldPairs(res):
-    when v is enum:
-      for e in low(typeof(v))..high(typeof(v)):
-        result.add (repeat("  ", lvl)) & "- " & $e & "\n"
-      {.cast(uncheckedAssign).}:
-        v = typeof(v)(ord(v) + 1)
-      lvl += 1
-    else:
-      let h =
-        when v.hasCustomPragma(aarg.help): v.getCustomPragmaVal(aarg.help)
-        else: ""
-      result.add repeat("  ", lvl) & k & ": " & $typeof(v) & "  " & h & "\n"
+  mkhelpobj(res)
 
