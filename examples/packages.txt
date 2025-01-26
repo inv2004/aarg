@@ -1,4 +1,3 @@
-https://github.com/Alogani/shellcmd 8m
 https://gitlab.3dicc.com/gokr/lapp 10y
 https://github.com/samdmarshall/cmd.nim 7y
 https://github.com/beshrkayali/loki 4y
@@ -14,6 +13,5 @@ https://github.com/madprops/nap 8m
 https://github.com/onelivesleft/simple_parseopt 4y
 https://bitbucket.org/maxgrenderjones/therapist/src/master/ 1y
 https://github.com/casey-SK/commandant 4y
-https://github.com/squattingmonk/blarg 3y
 https://github.com/HTGenomeAnalysisUnit/nim-simpleargs 3y
 https://github.com/AinTEAsports/nclap 2w
