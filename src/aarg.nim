@@ -132,29 +132,74 @@ proc parseArgs*[T: object](t: typedesc[T], s: string): T =
   if wasNotProcessed.len > 0:
     raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
 
-proc mkhelpobj*(res: var object, skip = 0, skip_lvl = 0): string =
+# a b* b1 f
+#   c* d* d1 f
+#      e* e2 f
+# +a +b +c +d +e +e2 f | d1 f | b1 f
+# +a +b ( c d ( e e2 f ) d1 f ) b1 f 
+# c d (e e2 f) d1 f
+
+proc mkhelpobj*(res: var object, skip = 0): seq[string] =
   var lvl = 0
-  var i = 1
+  var i = 0  
+  var rr: seq[seq[string]]
   for k, v in fieldPairs(res):
-    if i > skip:
+    if i >= skip:
       when v is enum:
         for e in low(typeof(v))..high(typeof(v)):
-          result.add (repeat("  ", lvl)) & "- " & $e & "\n"
           {.cast(uncheckedAssign).}:
             v = e
-          result.add mkhelpobj(res, i, lvl)
-          result.add "---\n"
-        lvl += 1
+          let r = mkhelpobj(res, i+1)
+          let r2 = @[(repeat(".", lvl)) & "- " & $e] & r
+          rr.add r2
+          lvl += 1
       else:
         let h =
           when v.hasCustomPragma(aarg.help): v.getCustomPragmaVal(aarg.help)
           else: ""
-        if lvl >= skip_lvl:
-          result.add repeat("  ", lvl) & k & ": " & $typeof(v) & "  " & h & "\n"
+        result.add repeat(",", lvl) & k & ": " & $typeof(v) & "  " & h
     inc i
-
 
 proc mkhelp*[T: object](): string =
   var res = T()
-  mkhelpobj(res)
+  for x in mkhelpobj(res):
+    echo x
+
+when isMainModule:
+# a b* b1 f
+#   c* d* d1 f
+#      e* e2 f
+  type
+    K1 = enum B, C
+    K2 = enum D, E
+    O = object
+      a: int
+      case k1: K1
+      of B:
+        case k2: K2
+        of D:
+          d1: int
+        of E:
+          e1: int
+      of C:
+        c1: int
+      f: string
+
+
+  proc main() =
+    var o = O()
+
+    var i = 0
+    for k, v in fieldPairs(o):
+      echo i, ": ", k, ": ", v
+      when v is enum:
+        for e in low(typeof(v))..high(typeof(v)):
+          {.cast(uncheckedAssign).}:
+            v = e
+          echo "change to ", e
+          for k2, v2 in fieldPairs(o):
+            echo "  ", i, ": ", k2, ": ", v2
+      inc i
+
+  main()
 
