@@ -1,205 +1,162 @@
 import std/parseopt
-import std/strutils
 import std/macros
+import std/tables
 
-template default*(key: untyped) {.pragma.}
-template another*(key: untyped) {.pragma.}
-template help*(help: string) {.pragma.}
+proc transform[T](x: ref object): T =
+  let res = T()
+  for k, v in fieldPairs(res[]):
+    for kk, vv in fieldPairs(x[]):
+      when k == kk:
+        v = vv
+        break
+  res
 
-proc setField(p: var seq[string], r: var seq[string], val, k: string) =
-  r.add val
+proc f(t: OrderedTable[string, seq[string]], n: string, lvl = 0): seq[(string, int)] =
+  if n in t:
+    for x in t[n]:
+      result.add f(t, x, lvl+1)
+      result.add (x, lvl+1)
 
-proc setField(p: var seq[string], r: var string, val, k: string) =
-  r = val
-  p.add k
+proc genCase(t: string, tt: seq[string]): NimNode =
+  result = nnkCaseStmt.newTree(
+    newIdentNode("a")
+  )
 
-proc setField(p: var seq[string], r: var int, val, k: string) =
-  r = parseInt(val)
-  p.add k
+  for t in tt:
+    result.add nnkOfBranch.newTree(
+      nnkPrefix.newTree(
+        newIdentNode("$"),
+        nnkCall.newTree(
+          newIdentNode("typeof"),
+          newIdentNode(t)
+        )
+      ),
+      nnkStmtList.newTree(
+        nnkAsgn.newTree(
+          newIdentNode("result"),
+          nnkCall.newTree(
+            nnkBracketExpr.newTree(
+              newIdentNode("transform"),
+              newIdentNode(t)
+            ),
+            newIdentNode("result")
+          )
+        )
+      )
+    )
 
-proc setField(p: var seq[string], r: var float, val, k: string) =
-  r = parseFloat(val)
-  p.add k
+  result.add nnkElse.newTree(
+    quote do:
+      raise newException(ValueError, "err " & `t` & ": " & a)
+  )
 
-proc setField(p: var seq[string], r: var bool, val, k: string) =
-  if val in ["", "t", "1", "true"]:
-    r = true
-    p.add k
-  elif val in ["f", "0", "false"]:
-    r = false
-    p.add k
+proc genIf(t: string, tt: seq[string], isRoot: bool): NimNode =
+  if isRoot:
+    result = nnkElse.newTree()
   else:
-    raise newException(ValueError, "cannot parse bool: `" & val & "`")
+    result = nnkElifBranch.newTree(
+      nnkInfix.newTree(
+        newIdentNode("of"),
+        newIdentNode("result"),
+        newIdentNode(t)
+      )
+    )
+  result.add genCase(t, tt)
 
-proc cmpKey(key, k: string, short: bool): bool =
-  if short:
-    key[0] == k.split("_")[^1][0]
-  else:
-    key == k.split("_")[^1]
+proc genTemplate(t: OrderedTable[string, seq[string]]): NimNode =
+  let ifStmt = nnkIfStmt.newTree()
 
-template setEnum[T,U](p: var seq[string], res: var T, v: U, val, k: string, ok: var bool) =
-  for e in low(typeof(v))..high(typeof(v)):
-    if cmpKey(toLowerAscii(val), toLowerAscii($e), false):
-      {.cast(uncheckedAssign).}:
-        v = e
-      p.add k
-      ok = true
-
-proc setOpt[T](p: var seq[string], res: var T, key, val: string, short: bool) =
-  var ok = false
-  for k, v in fieldPairs(res):
-    #echo "Opt: ", key , "=", val, " <=> ", k, " (", typeof(v), ")"
-    when v is enum:
-      if not ok and k notin p:
-        if cmpKey(key, k, short):
-          setEnum(p, res, v, val, k, ok)
-          if ok:
-            break
-        else:
-          when v.hasCustomPragma(aarg.default):
-            let pr = v.getCustomPragmaVal(aarg.default)
-            for e in low(typeof(v))..high(typeof(v)):
-              if toLowerAscii($e) == toLowerAscii(pr):
-                {.cast(uncheckedAssign).}:
-                  v = e
-    else:
-      if not ok and k notin p and cmpKey(key, k, short):
-        setField(p, v, val, k)
-        ok = true
-      else:
-        when v.hasCustomPragma(aarg.default):
-          v = v.getCustomPragmaVal(aarg.default)
-  if not ok:
-    raise newException(ValueError, "extra flag `" & key & "`")
-
-proc setArg[T](p: var seq[string], res: var T, val: string) =
-  var ok = false
-  for k, v in fieldPairs(res):
-    echo "Arg: ", val, " <=> ", k, " (", typeof(v), ")"
-    when v is enum:
-      if not ok and k notin p:
-        setEnum(p, res, v, val, k, ok)
-        if not ok:
-          when v.hasCustomPragma(aarg.another):
-            let pr = v.getCustomPragmaVal(aarg.another)
-            for e in low(typeof(v))..high(typeof(v)):
-              if toLowerAscii($e) == toLowerAscii(pr):
-                {.cast(uncheckedAssign).}:
-                  v = e
-                p.add k
-    else:
-      if not ok and k notin p:
-        setField(p, v, val, k)
-        ok = true
-      else:
-        when v.hasCustomPragma(aarg.default):
-          v = v.getCustomPragmaVal(aarg.default)
-  if not ok:
-    raise newException(ValueError, "extra arg `" & val & "`")
-
-proc parseArgs*[T: object](t: typedesc[T], s: string): T =
-  echo "> ", s
-  result = T()
-  var processed: seq[string]
-  var p = initOptParser(s)
-  for kind, key, val in p.getopt():
-    case kind
-    of cmdShortOption:
-      setOpt(processed, result, key, val, true)
-    of cmdLongOption:
-      setOpt(processed, result, key, val, false)
-    of cmdArgument:
-      setArg(processed, result, key)
-    of cmdEnd:
-      doAssert false
-
-  var wasNotProcessed: seq[string]
-  for k, v in fieldPairs(result):
-    when v isnot seq:
-      if k notin processed:
-        when v.hasCustomPragma(aarg.default):
-          when v is enum:
-            let pr = v.getCustomPragmaVal(aarg.default)
-            for e in low(typeof(v))..high(typeof(v)):
-              if toLowerAscii($e) == toLowerAscii(pr):
-                {.cast(uncheckedAssign).}:
-                  v = e
-          else:
-            v = v.getCustomPragmaVal(aarg.default)
-        else:
-          wasNotProcessed.add "`" & k & "`"
-
-  if wasNotProcessed.len > 0:
-    raise newException(ValueError, "was not set " & wasNotProcessed.join(", "))
-
-# a b* b1 f
-#   c* d* d1 f
-#      e* e2 f
-# +a +b +c +d +e +e2 f | d1 f | b1 f
-# +a +b ( c d ( e e2 f ) d1 f ) b1 f 
-# c d (e e2 f) d1 f
-
-proc mkhelpobj*(res: var object, skip = 0): seq[string] =
-  var lvl = 0
-  var i = 0  
-  var rr: seq[seq[string]]
-  for k, v in fieldPairs(res):
-    if i >= skip:
-      when v is enum:
-        for e in low(typeof(v))..high(typeof(v)):
-          {.cast(uncheckedAssign).}:
-            v = e
-          let r = mkhelpobj(res, i+1)
-          let r2 = @[(repeat(".", lvl)) & "- " & $e] & r
-          rr.add r2
-          lvl += 1
-      else:
-        let h =
-          when v.hasCustomPragma(aarg.help): v.getCustomPragmaVal(aarg.help)
-          else: ""
-        result.add repeat(",", lvl) & k & ": " & $typeof(v) & "  " & h
+  var i = 1
+  for k, v in t:
+    ifStmt.add genIf(k, v, i == len(t))
     inc i
 
-proc mkhelp*[T: object](): string =
-  var res = T()
-  for x in mkhelpobj(res):
-    echo x
+  nnkStmtList.newTree(
+    nnkTemplateDef.newTree(
+      newIdentNode("parseCmd"),
+      newEmptyNode(),
+      newEmptyNode(),
+      nnkFormalParams.newTree(
+        newIdentNode("untyped"),
+        nnkIdentDefs.newTree(
+          newIdentNode("a"),
+          newIdentNode("string"),
+          newEmptyNode()
+        )
+      ),
+      newEmptyNode(),
+      newEmptyNode(),
+      nnkStmtList.newTree(
+        ifStmt
+      )
+    )
+  )
+
+macro aargs*(body: untyped): typed =
+  var rels = initOrderedTable[string, seq[string]]()
+
+  for x in body:
+    if x.kind == nnkMethodDef:
+      continue
+    expectKind x, nnkTypeSection
+    for y in x:
+      expectKind y, nnkTypeDef
+      expectKind y[0], nnkIdent
+      expectKind y[2], nnkRefTy
+      expectKind y[2][0], nnkObjectTy
+      expectKind y[2][0][1], nnkOfInherit
+      expectKind y[2][0][1][0], nnkIdent
+      let o = strVal(y[0])
+      let po = strVal(y[2][0][1][0])
+      rels.mgetOrPut(po).add(o)
+
+  var lvls = f(rels, "RootObj").toTable()
+  echo lvls
+
+  let root = rels["RootObj"][0]
+  rels.del "RootObj"
+  rels.sort(func(a, b:(string, seq[string])): int = cmp(lvls[b[0]], lvls[a[0]]))
+
+  let t = genTemplate(rels)
+
+  let rootId = newIdentNode(root)
+
+  let p = quote do:
+    proc parse*(aa: seq[string]): `rootId` =
+      result = `rootId`()
+      for a in aa:
+        var found = false
+        for k, v in fieldPairs(result[]):
+          if "-" & k == a:
+            when v is bool:
+              v = true
+              found = true
+              break
+        if found:
+          continue
+        parseCmd(a)
+
+  newStmtList(
+    body,
+    t,
+    p
+  )
 
 when isMainModule:
-# a b* b1 f
-#   c* d* d1 f
-#      e* e2 f
-  type
-    K1 = enum B, C
-    K2 = enum D, E
-    O = object
-      a: int
-      case k1: K1
-      of B:
-        case k2: K2
-        of D:
-          d1: int
-        of E:
-          e1: int
-      of C:
-        c1: int
-      f: string
+  aargs:
+    type
+      A = ref object of RootObj
+        verbose: bool
+      C = ref object of B
+        di: int
+      B = ref object of A
+        id: int
 
+    method run(a: A) {.base.} =
+      echo "its A"
+    method run(b: B) =
+      echo "its B: ", b.id
+    method run(c: C) =
+      echo "its C"
 
-  proc main() =
-    var o = O()
-
-    var i = 0
-    for k, v in fieldPairs(o):
-      echo i, ": ", k, ": ", v
-      when v is enum:
-        for e in low(typeof(v))..high(typeof(v)):
-          {.cast(uncheckedAssign).}:
-            v = e
-          echo "change to ", e
-          for k2, v2 in fieldPairs(o):
-            echo "  ", i, ": ", k2, ": ", v2
-      inc i
-
-  main()
-
+  parse(@["-verbose", "B"]).run()
