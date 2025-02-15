@@ -1,6 +1,6 @@
 import unittest
 
-import aarg
+import aargs
 
 test "bool":
   aargs:
